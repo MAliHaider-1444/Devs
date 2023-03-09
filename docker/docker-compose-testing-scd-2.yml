@@ -1,0 +1,72 @@
+services:
+  scd-2:
+#    depends_on:
+#      - postgres
+    environment:
+      - PGUSER=postgres
+      - PGPASSWORD=postgres
+      - DATABASE=host.docker.internal
+    image: "postgres:15"
+    command:
+      - /bin/bash
+      - -c 
+      - | 
+        set -e
+        sleep 5 # postgres is not up at 0
+        psql -v ON_ERROR_STOP=ON --username $${PGUSER} --dbname postgres --host $${DATABASE} --port 5432 <<EOSQL
+        -- drop
+        drop table if exists test_data;
+        drop table if exists test_data_history;
+        
+        -- create
+        create table test_data (id serial PRIMARY KEY, zone_a_amount numeric(12,8), zone_b_amount numeric(12,8), curveStart TIMESTAMP);
+        create table test_data_history (id serial, zone_a_amount numeric(12,8), zone_b_amount numeric(12,8), curveStart TIMESTAMP, curveEnd TIMESTAMP);
+        CREATE INDEX ON test_data_history (id); -- this has to be updated? maybe foreign key
+
+        -- insert initial data (no history yet)
+        insert into test_data (zone_a_amount, zone_b_amount, curveStart) values (1.0, 1.0, TO_TIMESTAMP('6/1/2022', 'MM/DD/YYYY'));
+        insert into test_data (zone_a_amount, zone_b_amount, curveStart) values (1.1, 1.1, TO_TIMESTAMP('7/1/2022', 'MM/DD/YYYY'));
+
+        -- confirm 1 (brand new world)
+        select * from test_data;
+
+        -- update (via scd2)
+        \set _currenttime NOW() -- this is when the update is happening
+        \set _date_to_update 2022-07-01
+        \set _id_to_update 1
+        with data as ( -- this is the current non-history data that we are about to update
+            select * from test_data 
+            where curveStart = timestamp :'_date_to_update' -- need new data query here, not all things update, yet row gets copied
+            -- the hardcoded id in the update test_data needs to be flexiable as well
+        ),
+        update as (
+            insert into test_data_history (id, zone_a_amount, zone_b_amount, curveStart, curveEnd)
+            select id, zone_a_amount, zone_b_amount, curveStart, :_currenttime
+            from data
+        )
+        update test_data set zone_a_amount = 2.0, zone_b_amount = 2.0, curveStart = :_currenttime where curveStart = timestamp :'_date_to_update';
+        -- confirm 3
+        select * from test_data;
+        select * from test_data_history;
+
+        -- 2nd update (via scd2)
+        \set _currenttime2 NOW()
+        \set _date_to_update2 2022-07-01
+        with data as (
+            select * from test_data where curveStart = timestamp :'_date_to_update2' -- index whatever fields we are using
+        ),
+        update as (
+            insert into test_data_history (id, zone_a_amount, zone_b_amount, curveStart, curveEnd)
+            select id, zone_a_amount, zone_b_amount, curveStart, :_currenttime2
+            from data
+        )
+        update test_data set zone_a_amount = 3.0, zone_b_amount = 3.0 where curveStart = timestamp :'_date_to_update2';
+
+        -- confirm 3
+        select * from test_data;
+        select * from test_data_history;
+
+        -- TODO -- failure txs/rollback sql
+        -- TODO -- covert to panda
+        -- TODO -- failure txs/rollback panda
+        EOSQL

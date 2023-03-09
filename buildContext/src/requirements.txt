@@ -1,0 +1,5 @@
+pandas
+psycopg2-binary
+sqlalchemy<2.0 # issue with execute
+flask
+werkzeug

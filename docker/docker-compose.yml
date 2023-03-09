@@ -1,0 +1,321 @@
+services:
+  postgres:
+    environment:
+      - PGUSER=postgres
+      - POSTGRES_PASSWORD=postgres
+    image: "postgres:15"
+    ports:
+      - "0.0.0.0:5432:5432"
+  postgres-setup-1:
+    depends_on:
+      - postgres
+    environment:
+      - PGUSER=postgres
+      - PGPASSWORD=postgres
+      - DATABASE=postgres
+    image: "postgres:15"
+    entrypoint:
+      - /bin/bash
+      - -c 
+      - | 
+        set -e
+        sleep 10 # wait for postgres to be ready
+        psql -v ON_ERROR_STOP=1 --username $${PGUSER} --dbname postgres --host $${DATABASE} --port 5432 <<-EOSQL
+            CREATE USER docker;
+            CREATE DATABASE trueprice;
+            GRANT ALL PRIVILEGES ON DATABASE trueprice TO docker;
+            -- GRANT ALL ON SCHEMA public TO demo;
+            ALTER USER docker WITH encrypted password 'docker';
+        EOSQL
+  postgres-setup-2:
+    depends_on:
+      - postgres-setup-1
+    environment:
+      - PGUSER=docker
+      - PGPASSWORD=docker
+      - DATABASE=postgres
+    image: "postgres:15"
+    entrypoint:
+    - bin/bash
+    - -c
+    - |
+      set -e
+      sleep 10
+      psql -v ON_ERROR_STOP=1 --username $${PGUSER} --dbname trueprice --host $${DATABASE} --port 5432 <<-EOSQL
+        \c trueprice;
+        CREATE SCHEMA trueprice;
+        -- NYISO
+        CREATE TABLE trueprice.nyiso_forwardcurve ( -- history table differs
+          id serial PRIMARY KEY,
+          strip varchar(4), -- 7X8, 2X16, 7X24, etc. maybe enum one day
+          curveStart TIMESTAMPTZ, -- per file name (sans tz)
+          month TIMESTAMPTZ,
+          zone_a_amount NUMERIC(12,8), -- varies by iso, unclear best approach, single table or per iso table
+          zone_b_amount NUMERIC(12,8),
+          zone_c_amount NUMERIC(12,8),
+          zone_d_amount NUMERIC(12,8), 
+          zone_e_amount NUMERIC(12,8),     
+          zone_f_amount NUMERIC(12,8), 
+          zone_g_amount NUMERIC(12,8),
+          zone_h_amount NUMERIC(12,8),
+          zone_i_amount NUMERIC(12,8), 
+          zone_j_amount NUMERIC(12,8),     
+          zone_k_amount NUMERIC(12,8)
+        );
+        -- old data
+        -- union old and new data for all data (versus is_current column)
+        CREATE TABLE trueprice.nyiso_forwardcurve_history ( -- current table differs
+          id serial, -- not primary, this is fk to nyiso_forwardcurve
+          strip varchar(4), -- 7X8, 2X16, 7X24, etc. maybe enum one day
+          curveStart TIMESTAMPTZ, -- per original file name
+          curveEnd TIMESTAMPTZ, -- per new file name
+          month TIMESTAMPTZ,
+          zone_a_amount NUMERIC(12,8), -- varies by iso, unclear best approach, single table or per iso table
+          zone_b_amount NUMERIC(12,8),
+          zone_c_amount NUMERIC(12,8),
+          zone_d_amount NUMERIC(12,8), 
+          zone_e_amount NUMERIC(12,8),     
+          zone_f_amount NUMERIC(12,8), 
+          zone_g_amount NUMERIC(12,8),
+          zone_h_amount NUMERIC(12,8),
+          zone_i_amount NUMERIC(12,8), 
+          zone_j_amount NUMERIC(12,8),     
+          zone_k_amount NUMERIC(12,8)
+          );
+        -- ERCOT
+        CREATE TABLE trueprice.ercot_forwardcurve ( -- history table differs
+          id serial PRIMARY KEY,
+          strip varchar(4), -- 7X8, 2X16, 7X24, etc. maybe enum one day
+          curveStart TIMESTAMPTZ, -- per file name (sans tz)
+          month TIMESTAMPTZ,
+          north_amount NUMERIC(12,8), -- varies by iso, unclear best approach, single table or per iso table
+          houston_amount NUMERIC(12,8),
+          south_amount NUMERIC(12,8),
+          west_amount NUMERIC(12,8)
+        );
+        -- old data
+        -- union old and new data for all data (versus is_current column)
+        CREATE TABLE trueprice.ercot_forwardcurve_history ( -- current table differs
+          id serial, -- not primary, this is fk to nyiso_forwardcurve
+          strip varchar(4), -- 7X8, 2X16, 7X24, etc. maybe enum one day
+          curveStart TIMESTAMPTZ, -- per original file name
+          curveEnd TIMESTAMPTZ, -- per new file name
+          month TIMESTAMPTZ,
+          north_amount NUMERIC(12,8), -- varies by iso, unclear best approach, single table or per iso table
+          houston_amount NUMERIC(12,8),
+          south_amount NUMERIC(12,8),
+          west_amount NUMERIC(12,8)
+          );
+        -- ISONE
+        CREATE TABLE trueprice.isone_forwardcurve ( -- history table differs
+          id serial PRIMARY KEY,
+          strip varchar(4), -- 7X8, 2X16, 7X24, etc. maybe enum one day
+          curveStart TIMESTAMPTZ, -- per file name (sans tz)
+          month TIMESTAMPTZ,
+          maine_amount NUMERIC(12,8), -- varies by iso, unclear best approach, single table or per iso table
+          newhampshire_amount NUMERIC(12,8),
+          vermont_amount NUMERIC(12,8),
+          connecticut_amount NUMERIC(12,8),
+          rhodeisland_amount NUMERIC(12,8),
+          semass_amount NUMERIC(12,8),
+          wcmass_amount NUMERIC(12,8),
+          nemassbost_amount NUMERIC(12,8),
+          mass_amount NUMERIC(12,8)
+        );
+        -- old data
+        -- union old and new data for all data (versus is_current column)
+        CREATE TABLE trueprice.isone_forwardcurve_history ( -- current table differs
+          id serial, -- not primary, this is fk to nyiso_forwardcurve
+          strip varchar(4), -- 7X8, 2X16, 7X24, etc. maybe enum one day
+          curveStart TIMESTAMPTZ, -- per original file name
+          curveEnd TIMESTAMPTZ, -- per new file name
+          month TIMESTAMPTZ,
+          maine_amount NUMERIC(12,8), -- varies by iso, unclear best approach, single table or per iso table
+          vermont_amount NUMERIC(12,8),
+          connecticut_amount NUMERIC(12,8),
+          rhodeisland_amount NUMERIC(12,8),
+          semass_amount NUMERIC(12,8),
+          wcmass_amount NUMERIC(12,8),
+          nemassbost_amount NUMERIC(12,8),
+          mass_amount NUMERIC(12,8)
+        );
+        -- MISO
+        CREATE TABLE trueprice.miso_forwardcurve ( -- history table differs
+          id serial PRIMARY KEY,
+          strip varchar(4), -- 7X8, 2X16, 7X24, etc. maybe enum one day
+          curveStart TIMESTAMPTZ, -- per file name (sans tz)
+          month TIMESTAMPTZ,
+          amilcips_amount NUMERIC(12,8), -- varies by iso, unclear best approach, single table or per iso table
+          amilcilco_amount NUMERIC(12,8),
+          amilip_amount NUMERIC(12,8),
+          indy_amount NUMERIC(12,8)
+        );
+        -- old data
+        -- union old and new data for all data (versus is_current column)
+        CREATE TABLE trueprice.miso_forwardcurve_history ( -- current table differs
+          id serial, -- not primary, this is fk to nyiso_forwardcurve
+          strip varchar(4), -- 7X8, 2X16, 7X24, etc. maybe enum one day
+          curveStart TIMESTAMPTZ, -- per original file name
+          curveEnd TIMESTAMPTZ, -- per new file name
+          month TIMESTAMPTZ,
+          amilcips_amount NUMERIC(12,8), -- varies by iso, unclear best approach, single table or per iso table
+          amilcilco_amount NUMERIC(12,8),
+          amilip_amount NUMERIC(12,8),
+          indy_amount NUMERIC(12,8)
+        );
+        -- PJM
+        CREATE TABLE trueprice.pjm_forwardcurve ( -- history table differs
+          id serial PRIMARY KEY,
+          strip varchar(4), -- 7X8, 2X16, 7X24, etc. maybe enum one day
+          curveStart TIMESTAMPTZ, -- per file name (sans tz)
+          month TIMESTAMPTZ,
+          aeco_amount NUMERIC(12,8), -- varies by iso, unclear best approach, single table or per iso table
+          aep_amount NUMERIC(12,8),
+          aps_amount NUMERIC(12,8),
+          atsi_amount NUMERIC(12,8),
+          bge_amount NUMERIC(12,8),
+          comed_amount NUMERIC(12,8),
+          day_amount NUMERIC(12,8),
+          deok_amount NUMERIC(12,8),
+          dom_amount NUMERIC(12,8),
+          dpl_amount NUMERIC(12,8),
+          duq_amount NUMERIC(12,8),
+          jcpl_amount NUMERIC(12,8),
+          meted_amount NUMERIC(12,8),
+          peco_amount NUMERIC(12,8),
+          penelec_amount NUMERIC(12,8),
+          pepco_amount NUMERIC(12,8),
+          ppl_amount NUMERIC(12,8),
+          pseg_amount NUMERIC(12,8),
+          reco_amount NUMERIC(12,8),
+          west_amount NUMERIC(12,8),
+          ad_amount NUMERIC(12,8),
+          ni_amount NUMERIC(12,8),
+          east_amount NUMERIC(12,8)
+        );
+        -- old data
+        -- union old and new data for all data (versus is_current column)
+        CREATE TABLE trueprice.pjm_forwardcurve_history ( -- current table differs
+          id serial, -- not primary, this is fk to nyiso_forwardcurve
+          strip varchar(4), -- 7X8, 2X16, 7X24, etc. maybe enum one day
+          curveStart TIMESTAMPTZ, -- per original file name
+          curveEnd TIMESTAMPTZ, -- per new file name
+          month TIMESTAMPTZ,
+          aeco_amount NUMERIC(12,8), -- varies by iso, unclear best approach, single table or per iso table
+          aep_amount NUMERIC(12,8),
+          aps_amount NUMERIC(12,8),
+          atsi_amount NUMERIC(12,8),
+          bge_amount NUMERIC(12,8),
+          comed_amount NUMERIC(12,8),
+          day_amount NUMERIC(12,8),
+          deok_amount NUMERIC(12,8),
+          dom_amount NUMERIC(12,8),
+          dpl_amount NUMERIC(12,8),
+          duq_amount NUMERIC(12,8),
+          jcpl_amount NUMERIC(12,8),
+          meted_amount NUMERIC(12,8),
+          peco_amount NUMERIC(12,8),
+          penelec_amount NUMERIC(12,8),
+          pepco_amount NUMERIC(12,8),
+          ppl_amount NUMERIC(12,8),
+          pseg_amount NUMERIC(12,8),
+          reco_amount NUMERIC(12,8),
+          west_amount NUMERIC(12,8),
+          ad_amount NUMERIC(12,8),
+          ni_amount NUMERIC(12,8),
+          east_amount NUMERIC(12,8)
+        ); 
+        -- isone ancillarydata
+        CREATE TABLE trueprice.isone_ancillarydata (
+          id serial PRIMARY KEY,
+          strip varchar(4), -- 7X8, 2X16, 7X24, etc. maybe enum one day
+          curveStart TIMESTAMPTZ, -- per file name (sans tz)
+          month TIMESTAMPTZ,
+          load_zone varchar(15),
+          rtlo_mwh NUMERIC(12,8),
+          dalo_mwh NUMERIC(12,8),
+          deviations_mwh NUMERIC(12,8),
+          ncp_mw NUMERIC(12,8)
+        );
+        -- old data
+        -- union old and new data for all data (versus is_current column)
+        CREATE TABLE trueprice.isone_ancillarydata_history (
+          id serial, -- not primary, this is fk to nyiso_forwardcurve
+          strip varchar(4), -- 7X8, 2X16, 7X24, etc. maybe enum one day
+          curveStart TIMESTAMPTZ, -- per original file name
+          curveEnd TIMESTAMPTZ, -- per new file name
+          month TIMESTAMPTZ,
+          load_zone varchar(15),
+          rtlo_mwh NUMERIC(12,8),
+          dalo_mwh NUMERIC(12,8),
+          deviations_mwh NUMERIC(12,8),
+          ncp_mw NUMERIC(12,8)
+        );
+        -- isone ancillarydatadetails
+        CREATE TABLE trueprice.isone_ancillarydatadetails (
+          id serial PRIMARY KEY,
+          strip varchar(4), -- 7X8, 2X16, 7X24, etc. maybe enum one day
+          curveStart TIMESTAMPTZ, -- per file name (sans tz)
+          month TIMESTAMPTZ,
+          load_zone varchar(15),
+          ancillary varchar(30), -- may not be big enough
+          price NUMERIC(12,8),
+          billing_determinant varchar(20) -- may be to big
+        );
+        -- old data
+        -- union old and new data for all data (versus is_current column)
+        CREATE TABLE trueprice.isone_ancillarydatadetails_history (
+          id serial, -- not primary, this is fk to nyiso_forwardcurve
+          strip varchar(4), -- 7X8, 2X16, 7X24, etc. maybe enum one day
+          curveStart TIMESTAMPTZ, -- per original file name
+          curveEnd TIMESTAMPTZ, -- per new file name
+          month TIMESTAMPTZ,          
+          load_zone varchar(15),
+          ancillary varchar(30), -- may not be big enough
+          price NUMERIC(12,8),
+          billing_determinant varchar(20) -- may be to big
+        );        
+      EOSQL
+  adminer: # for postgres, php admin interface
+    image: adminer
+    restart: always
+    ports:
+      - "0.0.0.0:8080:8080"
+  grafana:
+    image: "grafana/grafana-oss"
+    ports:
+      - "0.0.0.0:3000:3000"
+  ingestor:
+    environment:
+      - PGUSER=docker
+      - PGPASSWORD=docker
+      - DATABASE=host.docker.internal
+    depends_on:
+      - postgres-setup-2
+    build:
+      context: ../buildContext # relative to vscode project
+      dockerfile: ./src/Dockerfile-ingestor # relative to context directory
+  trueprice-api:
+    environment:
+      - PGUSER=docker
+      - PGPASSWORD=docker
+      - DATABASE=host.docker.internal
+    depends_on:
+      - postgres-setup-2
+    build:
+      context: ../buildContext
+      dockerfile: ./src/Dockerfile-trueprice-api
+    ports:
+      - "0.0.0.0:5050:5000"
+
+
+# --- postgres
+# docker container run --name some-postgres -e POSTGRES_PASSWORD=postgres -p 0.0.0.0:5432:5432 -d postgres
+# create database trueprice;
+# \c trueprice;
+# create table data (id serial PRIMARY KEY, amount NUMERIC(12,8), hour TIMESTAMP);
+# insert into data (amount, hour) values (1.0, TO_TIMESTAMP('6/1/2022', 'MM/DD/YYYY'));
+# select * from data;
+# --- grafana
+# for grafana, use host.docker.internal:5432
+# docker container run -p 3000:3000 grafana/grafana-oss     

@@ -1,0 +1,6 @@
+FROM python:3.11-bullseye
+WORKDIR /
+RUN mkdir /flask_file_upload
+COPY /src/ /src/
+RUN pip install --no-cache-dir -r /src/requirements.txt
+ENTRYPOINT flask --app /src/trueprice_api run --host=0.0.0.0
